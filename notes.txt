@@ -1,0 +1,131 @@
+Notes
+
+1. Pull down the latest laravel install
+	1. run in a termin `curl -L https://github.com/laravel/laravel/archive/v5.3.16.tar.gz | tar xz`
+2. Install Dependancies
+	1. in terminal run `docker run --rm -v $(pwd):/app composer/composer install`
+	2. This will run a container that install php dependancies 
+	3. the `rm' flag will remove the container when its done
+3. Define the docker-compose files
+	1. There will be 2, Development and Production	
+	2. create a `docker-compose.yml` file with the following content
+		```version: '2'
+		services:
+		   	... our services will go here```
+	3. The define the app service, this will PHP-FPM this will run the application code
+	4. Add the following to compose file
+	```app:
+		build:
+    			context: ./
+			dockerfile: app.dockerfile
+		working_dir: /var/www
+		volumes:
+			- ./:/var/www
+		environment:
+    			- "DB_PORT=3306"
+    			- "DB_HOST=database"
+	```	
+	4. A seperate docker file `app.dockerfile` has been defined. This will give us more controll
+	5. The continer code is in the directory `/var/www` which will mirror our route
+		1. Assigning the volumes like this will be slow in preformance but gives a more productive workflow as the changes will reflect immediately
+	6. Environment Varibles required for the DB container are defined
+4. Create the app.dockerfile, this is the image for the app container
+	1. Create the file `app.dockerfile`
+	2. add contents
+	```
+	FROM php:7.0.4-fpm
+
+	RUN apt-get update && apt-get install -y libmcrypt-dev \
+    		mysql-client libmagickwand-dev --no-install-recommends \
+	    	&& pecl install imagick \
+    		&& dockker-php-ext-enable imagick \
+		&& docker-php-ext-install mcrypt pdo_mysql
+	```  
+	3. Once image is create run a command that installs the require php libarys
+5. Create Webserver container
+	1. The webserver will serv up static files and handle requests onto laravel
+	2. Update the docker compose file with the following 
+	```
+	web:
+  		build:
+    			context: ./
+    			dockerfile: web.dockerfile
+  		working_dir: /var/www
+  		volumes_from:
+    			- app
+  		ports:
+			- 8080:80```
+	3. we use the same volume defined in the app service
+	4. we map port 8080 on the host to port 80 in the container
+	5. now create the web.dockerfile
+	6. add in the following content
+	```
+	FROM nginx:1.10
+
+	ADD vhost.conf /etc/nginx/conf.d/default.conf
+	``` i
+		1. the locall vhost.conf file is add to the conatiner in the `etc/..` directory
+	7. create the vhost.conf 
+	8. add the followimng
+	server {
+	        listen 80;
+    		index index.php index.html;
+   	        root /var/www/public;
+
+    		location / {
+        		try_files $uri /index.php?$args;
+    		}
+
+		location ~ \.php$ {
+        		fastcgi_split_path_info ^(.+\.php)(/.+)$;
+		        fastcgi_pass app:9000;
+		        fastcgi_index index.php;
+		        include fastcgi_params;
+		        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+		        fastcgi_param PATH_INFO $fastcgi_path_info;
+ 		}
+	}
+
+		1. This sets up the port listening on 80 of the container
+		2. the php recieve requests on port 9000 of the app container, docker handles
+6. Creat ethe Mysql database conatiner
+	1. add the mysql service the docker compose
+	2. add the following content
+	```
+	database:
+		image: mysql:5.6
+    		volumes:
+      			- dbdata:/var/lib/mysql
+    		environment:
+     			- "MYSQL_DATABASE=homestead"
+			- "MYSQL_USER=homestead"
+		        - "MYSQL_PASSWORD=secret"
+		        - "MYSQL_ROOT_PASSWORD=secret"
+		ports:
+       			- "33061:3306"
+
+	volumes:
+		dbdata:
+	```
+	2. A colume is created the compose file to hold and persist the DB data after starting and restarting the docker compose
+		1. This volume is not Syncronised like the app container volume	
+	3. the database container uses the `dbdata` that is defined in the compose file
+		1. the `dbdata:/var/lib/mysql` states the directory /var/.... is mount from the dbdata volume
+	4. the environment varibles are required by the mydql:5.6 image
+	6. notice that the we do note have a database.dockerfile but use the mysql image directory
+	7. the host port 33061 is bound to the container port 3306
+		1. this is for easier development and will not as it allows access to the DB outside of the docker
+		2. this will not be required in production
+	8. Note this set doesnt actully create the homestead user, that has to be done manually
+7. Start with {docker-compose up} 
+8. once conatiners are runing use `docker ps` to see that there are 3 containers
+9. in the app root copy the .env.example to the .env
+10. execute the php artisan commands for app key `docker-compose exec app php artisan key:generate`
+11. and to optimise `docker-compose exec app php artisan optimize`
+	1. execuiting artisan by runn 'docker-compose' 'conatiner' 'command'
+
+Notes:
+	Useful Commands
+		- SSH into container docker-compose exec app bash (not actually sshing but simular)
+		- mysql, ssh into mysql with `docker-compose exec database mysql -u "root" -p`
+			- then enter the password defined in the docker compose file as ENV varible

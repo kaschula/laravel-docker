@@ -1,0 +1,12 @@
+Next steps
+    - create homestead user with the right password so that the app can run
+    - migrate Laravel and start playing around 
+    - develop something
+
+- update the php-fpm to use the latest php version
+
+
+- make a generic php project that instead of laravel has php src directory and just links to a generic php file
+
+
+- write a bash command, to start, stop, restart and build
